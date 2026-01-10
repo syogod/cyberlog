@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Cyberlog</title>
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+        <style>
+            :root{
+                --bg:#0f1724; --card:#0c2636; --muted:#94a3b8; --accent:#60a5fa; --success:#34d399; --danger:#fb7185; --glass: rgba(255,255,255,0.03);
+                --radius:10px; --gap:18px; --max-width:1100px; color-scheme: dark;
+            }
+            html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial; background:linear-gradient(180deg,#071127 0%, #071428 100%); color:#e6eef8;}
+            .site-header{max-width:var(--max-width);margin:18px auto 0;padding:18px 20px;display:flex;align-items:center;gap:12px}
+            .brand{font-weight:700;font-size:20px;color:var(--accent);}
+            .tagline{color:var(--muted);font-size:20px}
+            main.container{max-width:var(--max-width);margin:18px auto;padding:20px;display:block}
+            .grid{display:block;gap:var(--gap);align-items:start}
+            @media(min-width:880px){
+                .grid{column-count:2;column-gap:var(--gap);}
+            }
+            .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:var(--radius);padding:16px;box-shadow:0 6px 18px rgba(2,6,23,0.6);margin-bottom:var(--gap);} 
+            h1,h2,h3{margin:0 0 8px 0}
+            h2{font-size:18px}
+            .muted{color:var(--muted)}
+            label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+            input[type=text], input[type=number], select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;box-sizing:border-box}
+            button{background:var(--accent);color:#052034;border:0;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer}
+            .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--accent)}
+            .row{display:flex;gap:8px;align-items:center}
+            .small{font-size:13px}
+            .recent-item{border-bottom:1px solid rgba(255,255,255,0.02);padding:8px 0}
+            .list-compact{margin:0;padding:0;list-style:none}
+            .footer-link{color:var(--muted);font-size:13px}
+            /* calendar improvements (keeps earlier classes but tuned) */
+            .calendar td, .calendar th{border-radius:6px}
+        </style>
+        <style>
+            :root{
+                --bg:#071127; --card:#0c2636; --card-contrast:#12323f; --muted:#94a3b8; --accent:#60a5fa; --success:#34d399; --danger:#fb7185; --glass: rgba(255,255,255,0.03);
+                --radius:12px; --gap:18px; --max-width:1100px; color-scheme: dark;
+            }
+            html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial; background:linear-gradient(180deg,#071127 0%, #071428 100%); color:#e6eef8;}
+            .site-header{max-width:var(--max-width);margin:18px auto 0;padding:14px 20px;display:flex;align-items:center;gap:12px;justify-content:space-between}
+            .brand{font-weight:700;font-size:20px;color:var(--accent);}
+            .tagline{color:var(--muted);font-size:20px}
+            main.container{max-width:var(--max-width);margin:18px auto;padding:20px;display:block}
+            .grid{display:block;gap:var(--gap);align-items:start}
+            @media(min-width:880px){
+                .grid{column-count:2;column-gap:var(--gap);}
+            }
+            .card{background:linear-gradient(180deg,var(--card) 0%, var(--card-contrast) 100%);border-radius:var(--radius);padding:18px;box-shadow:0 10px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03);display:inline-flex;flex-direction:column;width:100%;box-sizing:border-box;break-inside:avoid; -webkit-column-break-inside:avoid;margin-bottom:var(--gap)}
+            h1,h2,h3{margin:0 0 8px 0}
+            h2{font-size:18px}
+            .muted{color:var(--muted)}
+            label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+            input[type=text], input[type=number], select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:#e6eef8;box-sizing:border-box}
+            select option{background:linear-gradient(180deg,#052034 0%, #052034 100%);color:#e6eef8}
+            button{background:var(--accent);color:#052034;border:0;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer}
+            .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--accent)}
+            .row{display:flex;gap:8px;align-items:center}
+            .small{font-size:13px}
+            .recent-item{border-bottom:1px solid rgba(255,255,255,0.02);padding:8px 0}
+            .list-compact{margin:0;padding:0;list-style:none}
+            .footer-link{color:var(--muted);font-size:13px}
+            /* calendar improvements (keeps earlier classes but tuned) */
+            .calendar td, .calendar th{border-radius:6px}
+            .nav-links{display:flex;gap:12px;align-items:center}
+            .nav-links a{color:var(--muted);text-decoration:none;padding:8px 10px;border-radius:8px}
+            .nav-links a.btn{background:rgba(255,255,255,0.03);color:var(--accent);border:1px solid rgba(255,255,255,0.03)}
+        </style>
+        </head>
+        <body>
+        <header class="site-header">
+            <div>
+                <div class="brand">Cyberlog</div>
+                <div class="tagline">You are becoming a better security practitioner.</div>
+            </div>
+            <div class="nav-links">
+                {% if request.url.path and request.url.path.startswith('/dashboard') %}
+                    <a href="/" class="btn">Log</a>
+                {% else %}
+                    <a href="/dashboard" class="btn">Dashboard</a>
+                {% endif %}
+            </div>
+        </header>
+        <script>
+            // Store user's IANA timezone in a cookie so server can render local times.
+            (function(){
+                try{
+                    const name = 'USER_TZ';
+                    const has = document.cookie.split(';').some(c=>c.trim().startsWith(name+'='));
+                    if(!has){
+                        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+                        const maxAge = 31536000; // 1 year
+                        document.cookie = `${name}=${encodeURIComponent(tz)}; path=/; max-age=${maxAge}`;
+                        if(!window.__cyberlog_tz_set){ window.__cyberlog_tz_set = true; location.reload(); }
+                    }
+                }catch(e){ /* ignore */ }
+            })();
+        </script>
+        <main class="container">
+            {% block content %}{% endblock %}
+        </main>
+        </body>
+        </html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CyberLog - Log Activity</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        label { display: block; margin-top: 10px; }
+        textarea { width: 300px; height: 60px; }
+        select, input, button { margin-top: 5px; }
+    </style>
+</head>
+<body>
+<h1>Log Activity</h1>
+
+<form method="post" action="/log">
+  <select name="activity_type_id">
+    <option value="">-- Select Activity --</option>
+    {% for a in activity_types %}
+      <option value="{{ a.id }}">{{ a.name }}</option>
+    {% endfor %}
+  </select>
+
+  <input type="text" name="custom_activity" placeholder="Custom activity">
+
+  <input type="number" name="duration_minutes" placeholder="Minutes">
+
+  <textarea name="notes"></textarea>
+
+  <button type="submit">Log Activity</button>
+</form>
+
+
+<p><a href="/dashboard">View Dashboard</a></p>
+</body>
+</html>

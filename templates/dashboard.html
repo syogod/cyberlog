@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="grid">
+  <div class="card">
+    <h2>Your Current Streak</h2>
+    {% if streak > 0 %}
+      <p>🔥 You have a {{ streak }}-day streak! Keep going!</p>
+    {% else %}
+      <p>No streak yet. Log something today to start!</p>
+    {% endif %}
+
+    <ul>
+    {% for name, count in stats %}
+        <li>{{ name }} — {{ count }}</li>
+    {% endfor %}
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Today's activity</h3>
+    <p><strong>Minutes logged:</strong> {{ today_total_minutes }} &nbsp; <strong>Entries:</strong> {{ today_entry_count }}</p>
+    {% if today_notes %}
+      <p><strong>Notes:</strong></p>
+      <ul>
+      {% for n in today_notes %}
+        <li>{{ n }}</li>
+      {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Top activity types</h3>
+    <ol>
+    {% for name, count in top_activities %}
+      <li>{{ name }} — {{ count }}</li>
+    {% endfor %}
+    </ol>
+  </div>
+
+  <div class="card">
+    <h3>Minutes per activity</h3>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:280px;min-height:260px;">
+            <h4>Daily (today)</h4>
+            <div style="min-height:200px;">
+              <canvas id="chartDaily" style="width:100%;height:100%;"></canvas>
+            </div>
+          </div>
+      <div style="flex:1;min-width:280px;min-height:260px;">
+        <h4>Weekly (last 7 days)</h4>
+        <div style="min-height:200px;">
+          <canvas id="chartWeekly" style="width:100%;height:100%;"></canvas>
+        </div>
+      </div>
+      <div style="flex:1;min-width:280px;min-height:260px;">
+        <h4>Monthly (this month)</h4>
+        <div style="min-height:200px;">
+          <canvas id="chartMonthly" style="width:100%;height:100%;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Monthly consistency calendar</h3>
+    <p>Green = logged, red = missed. Hover a day for details. Streak: <strong>{{ streak }}</strong></p>
+<style>
+  .calendar { display: inline-block; border-collapse: collapse; }
+  .calendar table { border-collapse: collapse; }
+  /* darker border so it reads above the light cell backgrounds */
+  .calendar th, .calendar td { width:36px; height:36px; text-align:center; vertical-align:middle; border:1px solid rgba(0,0,0,0.35); }
+  .cal-logged { background:#c8f7c5; color:#042028; } /* green with dark text for readability */
+  .cal-missed { background:#f7c5c5; color:#4a0b0b; } /* red with darker text */
+  .cal-empty { background:#e6eef8; color:#7b8a99; } /* subtle muted empty cells */
+  .cal-day { font-size:12px; }
+  .cal-legend { margin-top:8px; font-size:0.95em; color:var(--muted); }
+  .cal-tooltip { max-width:200px; text-align:left; font-size:12px; }
+  .calendar td .date-num { display:block; font-weight:600; }
+  .calendar td .entry-list { display:block; font-size:11px; }
+  @media (max-width:600px){ .calendar th, .calendar td { width:30px; height:30px; } }
+  
+</style>
+
+<div class="calendar">
+  <div class="calendar-header" style="text-align:center;margin-bottom:6px;">
+    <strong style="font-size:1.05rem">{{ month_start.strftime('%B %Y') }}</strong>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set start_weekday = month_start.weekday() %}
+      {# Python weekday(): Mon=0..Sun=6; we want Sun=0..Sat=6 #}
+      {% set first_wday = (month_start.weekday() + 1) % 7 %}
+      {% set day_index = 0 %}
+      {% set total = calendar_days|length %}
+      {% for week in range(((first_wday + total - 1) // 7) + 1) %}
+        <tr>
+        {% for wd in range(7) %}
+          {% set cell = None %}
+          {% if (week*7 + wd) >= first_wday and (week*7 + wd - first_wday) < total %}
+            {% set cell = calendar_days[week*7 + wd - first_wday] %}
+          {% endif %}
+          {% if not cell %}
+            <td class="cal-empty"></td>
+          {% else %}
+            {% if cell.logged %}
+              <td class="cal-logged">
+            {% else %}
+              <td class="cal-missed">
+            {% endif %}
+              <div class="cal-day" title="{% if cell.entries %}{% for en in cell.entries %}{{ en.activity }} — {{ en.minutes }} min{% if not loop.last %}\n{% endif %}{% endfor %}{% else %}No entries{% endif %}">
+                <span class="date-num">{{ cell.date.day }}</span>
+              </div>
+            </td>
+          {% endif %}
+        {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="cal-legend"><span style="display:inline-block;width:12px;height:12px;background:#c8f7c5;border:1px solid rgba(0,0,0,0.35);margin-right:6px;"></span> logged <span style="margin-left:12px;display:inline-block;width:12px;height:12px;background:#f7c5c5;border:1px solid rgba(0,0,0,0.35);margin-right:6px;"></span> missed</div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+function makeChart(ctxId, labels, data, type='bar'){
+  const ctx = document.getElementById(ctxId).getContext('2d');
+  return new Chart(ctx, {
+    type: type,
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Minutes',
+        data: data,
+        backgroundColor: labels.map((_,i)=>`hsl(${(i*47)%360} 70% 60%)`),
+      }]
+    },
+    options: {responsive:true, maintainAspectRatio:false}
+  });
+}
+
+// Helper to extract labels/data from Jinja lists
+const dailyLabels = [{% for n,m in daily_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+const dailyData = [{% for n,m in daily_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+const weeklyLabels = [{% for n,m in weekly_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+const weeklyData = [{% for n,m in weekly_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+const monthlyLabels = [{% for n,m in monthly_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+const monthlyData = [{% for n,m in monthly_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+document.addEventListener('DOMContentLoaded', function(){
+  if(dailyLabels.length) makeChart('chartDaily', dailyLabels, dailyData, 'pie');
+  if(weeklyLabels.length) makeChart('chartWeekly', weeklyLabels, weeklyData, 'bar');
+  if(monthlyLabels.length) makeChart('chartMonthly', monthlyLabels, monthlyData, 'bar');
+});
+</script>
+
+{% endblock %}

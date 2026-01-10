@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="grid">
+    <div class="card">
+        <h2>Log a security rep</h2>
+        <p class="muted small">Quickly record small learning reps — duration is optional.</p>
+        <form method="post" action="/log" style="margin-top:12px;">
+            <label for="activity_type_id">Activity</label>
+            <select name="activity_type_id" id="activity_type_id">
+                <option value="">— choose —</option>
+                {% for a in activities %}
+                <option value="{{ a.id }}">{{ a.name }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="custom_activity">Custom activity</label>
+            <input type="text" name="custom_activity" id="custom_activity" placeholder="Custom activity (optional)">
+
+            <div class="row" style="margin-top:8px;">
+                <div style="flex:1">
+                    <label for="duration_minutes">Duration (minutes)</label>
+                    <input type="number" name="duration_minutes" min="1" id="duration_minutes" placeholder="e.g. 30">
+                </div>
+                <div style="width:140px">
+                    <label>&nbsp;</label>
+                    <button type="submit" style="width:100%">Log rep</button>
+                </div>
+            </div>
+
+            <label for="notes" style="margin-top:10px">Notes</label>
+            <input type="text" name="notes" id="notes" placeholder="Optional note">
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Recent logs</h3>
+        {% if recent_logs %}
+            <ul class="list-compact">
+            {% for e in recent_logs %}
+                <li class="recent-item">
+                    <div class="row" style="justify-content:space-between;align-items:flex-start">
+                        <div>
+                            <div style="font-weight:600">{{ e.activity }}</div>
+                            <div class="muted small">{{ e.created_at }} — {{ e.duration_minutes or 0 }} min</div>
+                            {% if e.notes %}<div class="muted small">{{ e.notes }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <form method="post" action="/log/update" style="display:inline-block;margin-bottom:6px;">
+                                <input type="hidden" name="entry_id" value="{{ e.id }}">
+                                <input type="number" name="duration_minutes" min="0" value="{{ e.duration_minutes if e.duration_minutes is not none else '' }}" placeholder="mins" style="width:70px;padding:6px;margin-right:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.04)">
+                                <button type="submit" class="btn-ghost">Update</button>
+                            </form>
+                            <form method="post" action="/log/delete" style="display:inline-block;margin-left:6px;">
+                                <input type="hidden" name="entry_id" value="{{ e.id }}">
+                                <button type="submit" onclick="return confirm('Delete this log entry?');" class="btn-ghost" style="color:var(--danger);border-color:rgba(255,0,0,0.06)">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                </li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted">No recent logs yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+
+{% endblock %}
