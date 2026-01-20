@@ -57,7 +57,7 @@ def get_tz_from_request(request: Request) -> ZoneInfo:
         pass
     return LOCAL_TZ
 from database import Base, engine, SessionLocal
-from models import ActivityType, LogEntry
+from models import ActivityType, LogEntry, ParentActivity
 from sqlalchemy import func
 
 app = FastAPI()
@@ -110,14 +110,46 @@ def startup():
 
 def seed_activity_types():
     db = SessionLocal()
+    # ensure parent activities exist (hardcoded)
+    parent_names = [
+        "Bug Bounty",
+        "Reverse Engineering",
+        "Malware Analysis",
+        "Penetration testing",
+    ]
+    existing_parents = cast(dict, {p.name: p for p in db.query(ParentActivity).all()})
+    for pn in parent_names:
+        if pn not in existing_parents:
+            p = ParentActivity(name=pn)
+            db.add(p)
+    db.commit()
+
+    # Add some sensible default child activity types if none exist
+    # Ensure the `parent_id` column exists on the activity_types table (add if missing).
+    try:
+        with engine.connect() as conn:
+            col_check = conn.execute(text("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='activity_types' AND COLUMN_NAME='parent_id'"))
+            has_col = col_check.scalar() if col_check is not None else 0
+            if not has_col:
+                # MySQL: add nullable integer parent_id column
+                conn.execute(text("ALTER TABLE activity_types ADD COLUMN parent_id INT NULL"))
+    except Exception:
+        # best-effort: ignore if this fails (e.g., sqlite or insufficient perms)
+        pass
+
     if db.query(ActivityType).count() == 0:
-        db.add_all([
-            ActivityType(name="Read one vuln writeup"),
-            ActivityType(name="Analyze exploit PoC"),
-            ActivityType(name="Reverse small malware sample"),
-            ActivityType(name="Read one CVE"),
-            ActivityType(name="Practice one lab step"),
-        ])
+        parents = cast(dict, {p.name: p.id for p in db.query(ParentActivity).all()})
+        # list child names with parent name; resolve parent ids below to avoid ambiguous typing
+        children = [
+            ("Read one vuln writeup", "Bug Bounty"),
+            ("Analyze exploit PoC", "Bug Bounty"),
+            ("Reverse small malware sample", "Reverse Engineering"),
+            ("Read one CVE", "Bug Bounty"),
+            ("Practice one lab step", "Penetration testing"),
+        ]
+        for name, parent_name in children:
+            parent_id = parents.get(parent_name)
+            db.add(ActivityType(name=name, parent_id=parent_id))
         db.commit()
     db.close()
 
@@ -127,7 +159,8 @@ def seed_activity_types():
 def home(request: Request, db: Session = Depends(get_db)):
     tz = get_tz_from_request(request)
     streak = get_current_streak(db, tz)
-    # Provide activity types for the dropdown on the index page
+    # Provide parent activities and child activity types for the dropdown on the index page
+    parents = db.query(ParentActivity).order_by(ParentActivity.name).all()
     activities = db.query(ActivityType).order_by(ActivityType.name).all()
     # Last 3 log entries with activity name (if available) and metadata
     recent_q = (
@@ -153,6 +186,11 @@ def home(request: Request, db: Session = Depends(get_db)):
             "request": request,
             "streak": streak,
             "activities": activities,
+            "parents": parents,
+            # lightweight mapping for JS: list of {id,name,parent_id}
+            "activity_map": [
+                {"id": a.id, "name": a.name, "parent_id": a.parent_id} for a in activities
+            ],
             "recent_logs": recent_logs,
             "user_tz": str(tz),
         }
@@ -161,6 +199,7 @@ def home(request: Request, db: Session = Depends(get_db)):
 @app.post("/log")
 def log_activity(
     activity_type_id: Optional[int] = Form(None),
+    parent_id: Optional[int] = Form(None),
     custom_activity: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
     duration_minutes: Optional[int] = Form(None),
@@ -175,7 +214,7 @@ def log_activity(
                 activity_type_id = cast(int, existing.id)
             else:
                 # create new activity type
-                new_at = ActivityType(name=name)
+                new_at = ActivityType(name=name, parent_id=parent_id)
                 db.add(new_at)
                 db.commit()
                 db.refresh(new_at)
@@ -276,6 +315,28 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     weekly_minutes = minutes_by_activity(week_start, None)
     monthly_minutes = minutes_by_activity(month_start, None)
 
+    # Minutes aggregated by parent activity (parents are hardcoded)
+    def minutes_by_parent(start_dt, end_dt=None):
+        # join parent -> activity -> log, but only include LogEntry rows within the time window
+        cond = (LogEntry.activity_type_id == ActivityType.id) & (LogEntry.created_at >= start_dt)
+        if end_dt:
+            cond = cond & (LogEntry.created_at < end_dt)
+
+        q = (
+            db.query(
+                ParentActivity.name.label('name'),
+                func.coalesce(func.sum(LogEntry.duration_minutes), 0).label('minutes'),
+            )
+            .join(ActivityType, ActivityType.parent_id == ParentActivity.id)
+            .outerjoin(LogEntry, cond)
+            .group_by(ParentActivity.id)
+        )
+        return q.all()
+
+    daily_parent_minutes = minutes_by_parent(day_start, day_end)
+    weekly_parent_minutes = minutes_by_parent(week_start, None)
+    monthly_parent_minutes = minutes_by_parent(month_start, None)
+
     # Calendar data for the current month: per-day list of log entries and summary
     month_q = (
         db.query(LogEntry, ActivityType.name.label("activity_name"))
@@ -322,6 +383,45 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Parent-level summaries: total minutes and counts per parent, and top child by minutes
+    parent_rows = (
+        db.query(
+            ParentActivity.id.label('id'),
+            ParentActivity.name.label('name'),
+            func.coalesce(func.sum(LogEntry.duration_minutes), 0).label('minutes'),
+            func.count(LogEntry.id).label('count'),
+        )
+        .join(ActivityType, ActivityType.parent_id == ParentActivity.id)
+        .outerjoin(LogEntry, LogEntry.activity_type_id == ActivityType.id)
+        .group_by(ParentActivity.id)
+        .all()
+    )
+
+    parent_summaries = []
+    for pid, pname, pminutes, pcount in parent_rows:
+        # find top child activity for this parent by total minutes
+        top_child = (
+            db.query(ActivityType.name.label('child_name'), func.coalesce(func.sum(LogEntry.duration_minutes), 0).label('minutes'))
+            .outerjoin(LogEntry, LogEntry.activity_type_id == ActivityType.id)
+            .filter(ActivityType.parent_id == pid)
+            .group_by(ActivityType.id)
+            .order_by(func.coalesce(func.sum(LogEntry.duration_minutes), 0).desc())
+            .limit(1)
+            .first()
+        )
+        if top_child:
+            child_name, child_minutes = top_child
+        else:
+            child_name, child_minutes = None, 0
+        parent_summaries.append({
+            'id': pid,
+            'name': pname,
+            'minutes': int(pminutes or 0),
+            'count': int(pcount or 0),
+            'top_child': child_name,
+            'top_child_minutes': int(child_minutes or 0),
+        })
+
     # Today's activity summary
     today_total_minutes = (
         db.query(func.coalesce(func.sum(LogEntry.duration_minutes), 0))
@@ -344,8 +444,11 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "stats": stats,
             "streak": streak,
             "daily_minutes": daily_minutes,
-            "weekly_minutes": weekly_minutes,
-            "monthly_minutes": monthly_minutes,
+                "weekly_minutes": weekly_minutes,
+                "monthly_minutes": monthly_minutes,
+                "daily_parent_minutes": daily_parent_minutes,
+                "weekly_parent_minutes": weekly_parent_minutes,
+                "monthly_parent_minutes": monthly_parent_minutes,
             "top_activities": top_activities,
             "today_total_minutes": int(today_total_minutes or 0),
             "today_entry_count": int(today_entry_count or 0),
@@ -354,5 +457,83 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             # pass local month_start (date) to template for weekday calculations
             "month_start": month_start_local.date(),
             "user_tz": str(tz),
+                "parent_summaries": parent_summaries,
         },
     )
+
+
+@app.get("/migrate")
+def migrate(request: Request, db: Session = Depends(get_db)):
+        """
+        Simple migration helper: assigns parent_ids for existing ActivityType rows
+        and optionally creates ActivityType rows for LogEntry.custom_activity values.
+        Uses keyword heuristics to map to one of the four hardcoded parents.
+        """
+        # ensure parents exist
+        seed_activity_types()
+
+        # simple keyword -> parent mapping
+        mapping = {
+            'Reverse Engineering': ['reverse', 'disassemble', 'deobfus', 'rip'],
+            'Malware Analysis': ['malware', 'trojan', 'ransom', 'sample'],
+            'Bug Bounty': ['vuln', 'cve', 'exploit', 'poc', 'writeup', 'vulnerability'],
+            'Penetration testing': ['practice', 'lab', 'ctf', 'pentest', 'scan', 'exercise'],
+        }
+
+        parents = cast(dict, {p.name: p for p in db.query(ParentActivity).all()})
+
+        changed = []
+        # Assign parents for activity types without parent
+        for at in db.query(ActivityType).filter(ActivityType.parent_id == None).all():
+            name = (at.name or '').lower()
+            assigned = None
+            for pname, keywords in mapping.items():
+                for kw in keywords:
+                    if kw in name:
+                        assigned = parents.get(pname)
+                        break
+                if assigned:
+                    break
+            if not assigned:
+                assigned = parents.get('Bug Bounty')
+            if assigned:
+                at.parent_id = assigned.id
+                db.add(at)
+                changed.append((at.name, assigned.name))
+        db.commit()
+
+        # Create ActivityType rows for distinct custom_activity values in LogEntry where activity_type_id is null
+        created = []
+        custom_names = db.query(func.distinct(LogEntry.custom_activity)).filter(LogEntry.custom_activity != None).all()
+        for (cname,) in custom_names:
+            if not cname:
+                continue
+            exists = db.query(ActivityType).filter(ActivityType.name == cname).first()
+            if exists:
+                continue
+            lname = cname.lower()
+            assigned = None
+            for pname, keywords in mapping.items():
+                for kw in keywords:
+                    if kw in lname:
+                        assigned = parents.get(pname)
+                        break
+                if assigned:
+                    break
+            if not assigned:
+                assigned = parents.get('Bug Bounty')
+            new_at = ActivityType(name=cname, parent_id=assigned.id if assigned else None)
+            db.add(new_at)
+            db.commit()
+            db.refresh(new_at)
+            created.append((cname, assigned.name if assigned else None))
+
+        out = "<h3>Migration Results</h3>\n"
+        out += f"<p>Assigned parents for {len(changed)} existing activity types.</p>\n"
+        if changed:
+            out += "<ul>" + "".join(f"<li>{a} -> {p}</li>" for a, p in changed) + "</ul>"
+        out += f"<p>Created {len(created)} ActivityType rows from custom activity values.</p>\n"
+        if created:
+            out += "<ul>" + "".join(f"<li>{a} -> {p}</li>" for a, p in created) + "</ul>"
+        out += '<p><a href="/dashboard">Back to dashboard</a></p>'
+        return HTMLResponse(out)

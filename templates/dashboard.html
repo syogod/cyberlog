@@ -18,6 +18,19 @@
   </div>
 
   <div class="card">
+    <h3>Parent activity summaries</h3>
+    <ul>
+    {% for p in parent_summaries %}
+      <li><strong>{{ p.name }}</strong> — {{ p.minutes }} minutes total ({{ p.count }} entries)
+        {% if p.top_child %}
+          — top child: {{ p.top_child }} ({{ p.top_child_minutes }} min)
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  </div>
+
+  <div class="card">
     <h3>Today's activity</h3>
     <p><strong>Minutes logged:</strong> {{ today_total_minutes }} &nbsp; <strong>Entries:</strong> {{ today_entry_count }}</p>
     {% if today_notes %}
@@ -147,14 +160,15 @@ function makeChart(ctxId, labels, data, type='bar'){
 }
 
 // Helper to extract labels/data from Jinja lists
-const dailyLabels = [{% for n,m in daily_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
-const dailyData = [{% for n,m in daily_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+// Use parent-level minutes for charts
+const dailyLabels = [{% for n,m in daily_parent_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+const dailyData = [{% for n,m in daily_parent_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
 
-const weeklyLabels = [{% for n,m in weekly_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
-const weeklyData = [{% for n,m in weekly_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+const weeklyLabels = [{% for n,m in weekly_parent_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+const weeklyData = [{% for n,m in weekly_parent_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
 
-const monthlyLabels = [{% for n,m in monthly_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
-const monthlyData = [{% for n,m in monthly_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+const monthlyLabels = [{% for n,m in monthly_parent_minutes %}"{{ n }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+const monthlyData = [{% for n,m in monthly_parent_minutes %}{{ m or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
 
 document.addEventListener('DOMContentLoaded', function(){
   if(dailyLabels.length) makeChart('chartDaily', dailyLabels, dailyData, 'pie');

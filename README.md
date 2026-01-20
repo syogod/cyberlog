@@ -9,12 +9,16 @@ Cyberlog is a lightweight FastAPI web application to record small security learn
 - Optional duration in minutes and notes per entry
 - Dashboard with:
   - Current streak (consecutive days with activity)
-  - Minutes-per-activity summaries (daily, weekly, monthly)
+  - Minutes-per-parent-activity summaries (daily, weekly, monthly)
   - Top activity types
   - Monthly calendar showing days with/without logs
   - Small charts powered by Chart.js (client-side)
 - Simple CRUD for recent log entries (update duration / delete)
 - Per-user timezone rendering via a browser-set `USER_TZ` cookie
+
+Additional behavior:
+- Parent/child activity model: activities are organized under four hardcoded parent activities (`Bug Bounty`, `Reverse Engineering`, `Malware Analysis`, `Penetration testing`). The log form requires selecting a parent first and then choosing from its child activity types (or adding a custom child tied to the selected parent).
+- Migration helper: a best-effort `GET /migrate` endpoint maps existing activity types and `custom_activity` values into parents using simple keyword heuristics — use it once after upgrading the schema.
 
 ---
 

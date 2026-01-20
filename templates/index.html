@@ -6,12 +6,17 @@
         <h2>Log a security rep</h2>
         <p class="muted small">Quickly record small learning reps — duration is optional.</p>
         <form method="post" action="/log" style="margin-top:12px;">
-            <label for="activity_type_id">Activity</label>
-            <select name="activity_type_id" id="activity_type_id">
-                <option value="">— choose —</option>
-                {% for a in activities %}
-                <option value="{{ a.id }}">{{ a.name }}</option>
+            <label for="parent_id">Parent activity</label>
+            <select name="parent_id" id="parent_id">
+                <option value="">— choose parent —</option>
+                {% for p in parents %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
                 {% endfor %}
+            </select>
+
+            <label for="activity_type_id">Child activity</label>
+            <select name="activity_type_id" id="activity_type_id" disabled>
+                <option value="">— choose parent first —</option>
             </select>
 
             <label for="custom_activity">Custom activity</label>
@@ -66,5 +71,51 @@
     </div>
 
 </div>
+
+<script>
+// activity_map is provided by server as `activity_map`
+const activityMap = {{ activity_map|tojson }};
+const parentSelect = document.getElementById('parent_id');
+const childSelect = document.getElementById('activity_type_id');
+
+function populateChildrenForParent(parentId){
+    // clear children
+    childSelect.innerHTML = '<option value="">— choose child —</option>';
+    activityMap.forEach(a => {
+        if(String(a.parent_id) === String(parentId)){
+            const opt = document.createElement('option');
+            opt.value = a.id;
+            opt.textContent = a.name;
+            opt.setAttribute('data-parent', a.parent_id);
+            childSelect.appendChild(opt);
+        }
+    });
+}
+
+// initially disabled until a parent is chosen
+if(childSelect) {
+    childSelect.disabled = true;
+}
+
+parentSelect && parentSelect.addEventListener('change', function(e){
+    const pid = this.value;
+    if(!pid){
+        // clear and keep disabled until a parent is chosen
+        childSelect.innerHTML = '<option value="">— choose parent first —</option>';
+        childSelect.disabled = true;
+    } else {
+        populateChildrenForParent(pid);
+        childSelect.disabled = false;
+    }
+});
+
+// When a child is selected, auto-select its parent
+childSelect && childSelect.addEventListener('change', function(e){
+    const opt = this.options[this.selectedIndex];
+    if(!opt) return;
+    const p = opt.getAttribute('data-parent');
+    if(p && parentSelect) parentSelect.value = p;
+});
+</script>
 
 {% endblock %}
